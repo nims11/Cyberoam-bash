@@ -1,0 +1,16 @@
+# Cyberoam server
+# server <address>
+#
+# Example:
+# server https://172.16.1.1:8090
+server https://172.16.1.1:8090
+
+# Profiles
+# Format:
+# <profile_name> <id> <pass>
+#
+# profile_name shoube not contain whitespace and should not be "server"
+#
+# example:
+# mine be12342001 qwerty
+myID be12342066 aabbcc

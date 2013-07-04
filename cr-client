@@ -1,0 +1,113 @@
+#!/bin/bash
+CONF_FILE="`dirname $0`/config"
+PID_FILE="$HOME/cr-client.pid"
+LOG_FILE="$HOME/cr-client.log"
+E_BADARGS=132
+E_LOGOUT=133
+E_LOGIN=134
+E_MISSING_CONF=135
+E_MISSING_ADDR=136
+if [[ ! -f "$CONF_FILE" ]]; then
+	echo "$CONF_FILE not found"
+	exit $E_MISSING_CONF
+fi
+ADDR=`awk '$1=="server"&&$0=$2' "$CONF_FILE"`
+[[ "$ADDR" =~ ^\ *$ ]] && echo "No server specified in $CONF_FILE" && exit $E_MISSING_ADDR
+LOGIN_ADDR=$ADDR"/httpclient.html"
+RELOGIN_ADDR=$ADDR"/live"
+usage ()
+{
+	cat << EOF
+Usage:
+	`basename $0` login <profile>
+	`basename $0` login <username> <password>
+	`basename $0` logout
+	`basename $0` -h
+	`basename $0` --help
+EOF
+}
+bad_args ()
+{
+	echo "Invalid arguments"
+	usage
+	exit $E_BADARGS
+}
+
+if [[ $1 == "-h" || $1 == "--help" ]]
+then
+	usage
+	exit
+fi
+
+if [[ $# < 1 || $# > 3 ]]
+then
+	bad_args
+fi
+
+login ()
+{
+	RET_VAL=`curl -m 5 -k -s --data "username=$1&password=$2&mode=191" "$LOGIN_ADDR"`
+	RET_VAL=`echo $RET_VAL | sed -n -e 's/.*<message>\(.*\)<\/message>.*/\1/p'`
+	if [[ "$RET_VAL" == "" ]]; then echo "No comprehendable response from the server"; fi
+	[[ "$RET_VAL" != "You have successfully logged in" ]] && echo "Login Error: $RET_VAL" && return 1 || return 0
+}
+
+logout ()
+{
+	if [[ -f "$PID_FILE" ]]; then 
+		kill -9 `awk '$0=$1' "$PID_FILE"`
+		USER=`awk '$0=$2' "$PID_FILE"`
+		RET_VAL=`curl -m 5 -k -s --data "username=$USER&mode=193" "$LOGIN_ADDR"`
+		RET_VAL=`echo $RET_VAL | sed -n -e 's/.*<message>\(.*\)<\/message>.*/\1/p'`
+		rm "$PID_FILE"
+		[[ "$RET_VAL" != "You have successfully logged off" ]] && echo "Coudn't comprehend the response: $RET_VAL" && return 1 || return 0
+	fi
+	echo "$PID_FILE not found, failed to perform logout operation"
+	return 1
+}
+
+perform_login ()
+{
+	logout > /dev/null
+	USER=$1
+	PASS=$2
+	login $USER $PASS
+	if [[ $? != 0 ]]; then exit $E_LOGIN; fi
+	(
+		read USER RELOGIN_ADDR
+		while true
+		do
+			sleep 180
+			RET=`curl -m 5 -k -s "$RELOGIN_ADDR?mode=192&username=$USER"`
+			RET=`echo $RET | sed -n -e 's/.*<ack>\(.*\)<\/ack>.*/\1/p'`
+			if [[ "$RET" != "ack" ]]; then echo "`date`: "$RET; break; fi
+		done
+	) < <(echo $USER $RELOGIN_ADDR) > "$LOG_FILE" &
+	pid=$!
+	echo $pid $USER > "$PID_FILE"
+	echo "User $USER Logged in..."
+
+}
+if [[ $# == 1 ]]
+then
+	if [[ "$1" != "logout" ]]; then bad_args; fi
+	logout
+	if [[ $? == 0 ]]; then echo "Logged off..."; exit 0; fi
+	exit $E_LOGOUT
+fi
+
+if [[ $# == 2 ]]
+then
+	[[ "$1" != "login" ]] && bad_args
+	read USER PASS <<< `awk 'NF==3 && $1=="'"$2"'"{print $2, $3;exit}' "$CONF_FILE"`
+	if [[ $USER == "" || $PASS == "" ]]; then echo "Profile $2 not found in $CONF_FILE"; exit $E_LOGIN; fi
+	if [[ $? == 0 ]]; then
+		perform_login $USER $PASS
+	fi
+fi
+
+if [[ $# == 3 ]]
+then
+	[[ "$1" != "login" ]] && bad_args
+	perform_login $2 $3
+fi

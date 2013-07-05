@@ -23,7 +23,7 @@ Each line of config specifies a config option. Following are possible configurat
 > \# Specify Cyberoam Server
 > > server https://172.16.1.1:8090
 > 
-> \# Specify a Profile (Profile name should be anything other than "server"
+> \# Specify a Profile (Profile name should be anything other than "server")
 > > myID be12342045 pass123
 
 You can also configure few other script parameters by checking out the initial lines of the script itself

@@ -9,7 +9,7 @@ server https://172.16.1.1:8090
 # Format:
 # <profile_name> <id> <pass>
 #
-# profile_name shoube not contain whitespace and should not be "server"
+# profile_name should not contain whitespace and should not be "server"
 #
 # example:
 # mine be12342001 qwerty

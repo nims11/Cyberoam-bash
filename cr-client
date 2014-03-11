@@ -57,7 +57,8 @@ login ()
 	RET_VAL=`echo $RET_VAL | sed -n -e 's/.*<message>\(.*\)<\/message>.*/\1/p'`
 
 	if [[ "$RET_VAL" == "" ]]; then echo "No comprehendable response from the server"; fi
-	[[ "$RET_VAL" != "You have successfully logged in" ]] && echo "Login Error: $RET_VAL" && return 1 || return 0
+	echo $RET_VAL
+	[[ ! $RET_VAL =~ "successfully logged in" ]] && echo "Login Error: $RET_VAL" && return 1 || return 0
 }
 
 logout ()
@@ -89,13 +90,23 @@ perform_login ()
 		read USER RELOGIN_ADDR
 		while true
 		do
-			# As per observing cyberoam activity, it sends a relogin (kind of) every 3 minutes
-			sleep 180
+			# As per observing cyberoam activity, it sends a relogin (kind of) every 3 minutes, to be safe, taking val 90
+			sleep 90
+			TRIES=30
 			RET=`curl -m 5 -k -s "$RELOGIN_ADDR?mode=192&username=$USER"`
 			RET=`echo $RET | sed -n -e 's/.*<ack>\(.*\)<\/ack>.*/\1/p'`
+
+			while [[ "$RET" != "ack" && $TRIES > 0 ]]; do
+				sleep 1
+				echo "Error! $TRIES tries remaining"
+				RET=`curl -m 5 -k -s "$RELOGIN_ADDR?mode=192&username=$USER"`
+				RET=`echo $RET | sed -n -e 's/.*<ack>\(.*\)<\/ack>.*/\1/p'`
+				let 'TRIES--'
+			done
+
 			if [[ "$RET" != "ack" ]]; then echo "`date`: "$RET; break; fi
 		done
-	) < <(echo $USER $RELOGIN_ADDR) > "$LOG_FILE" & # Fork it in background
+	) < <(echo $USER $RELOGIN_ADDR) >> "$LOG_FILE" & # Fork it in background
 	pid=$!
 	# Write the pidfile
 	echo $pid $USER > "$PID_FILE"
